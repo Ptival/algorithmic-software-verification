@@ -30,11 +30,11 @@ function main(){
   var l    = create();
 
   while (0 < n){
-    if (0 < flag){ 
-      l = lock(l) 
+    if (0 < flag){
+      l = lock(l)
     }
-    if (0 <= flag){ 
-      l = unlock(l) 
+    if (0 <= flag){
+      l = unlock(l)
     }
     n = n - 1;
   }

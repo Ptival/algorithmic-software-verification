@@ -1,7 +1,9 @@
 function driver(newCount, oldCount){
+  requires(newCount >= 0);
   assume(newCount != oldCount);
   var lock = 0;
   while (newCount != oldCount){
+    invariant(newCount != oldCount || lock == 1);
     lock = 1;
     oldCount = newCount;
     if (0 < newCount){

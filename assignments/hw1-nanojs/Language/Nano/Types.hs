@@ -362,6 +362,9 @@ instance PP (Fun SourcePos) where
                              $+$ text "requires: " <+> pp pre
                              $+$ text "ensures: "  <+> pp post
 
+instance Show a => Show (VCond_ a) where
+  show (VC m) = show $ fmap show m
+
 ppObligations lps   =   text "Verification Condition"
                     $+$ vcat (map ppObligation lps)
 

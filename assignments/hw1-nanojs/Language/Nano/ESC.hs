@@ -21,6 +21,7 @@ import           Language.Nano.Types
 import           Language.Nano.VCMonad
 import           Data.Monoid
 import           Data.Maybe                   (isJust, fromJust)
+import           Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | Top-level Verifier
@@ -32,6 +33,7 @@ verifyFile f
   = do nano   <- parseNanoFromFile f
        forM_ nano (putStrLn . render . pp)
        let vc  = genVC nano
+       --putStrLn $ "VC:\n" ++ show vc
        writeFile (f `addExtension` ".vc") (render $ pp vc)
        rs     <- mapM checkVC $ obligationsVCond vc
        forM_ rs $ putStrLn . render . pp
@@ -72,8 +74,9 @@ class IsVerifiable a where
 instance IsVerifiable (Fun SourcePos) where
   generateVC fn _   = generateFunVC fn
 
-instance IsVerifiable a => IsVerifiable [a] where
-  generateVC xs vc  = errorstar "FILL THIS IN 1"
+instance (IsVerifiable a) => IsVerifiable [a] where
+  generateVC xs vc  =
+    foldM (flip generateVC) vc (reverse xs)
 
 instance IsVerifiable (Statement SourcePos) where
   generateVC        = generateStmtVC
@@ -86,7 +89,7 @@ instance IsVerifiable (VarDecl SourcePos) where
 generateFunVC    :: Fun SourcePos -> VCM VCond
 --------------------------------------------------------------------------------
 generateFunVC fn
-  = do _     <- setFunction fn
+  = do setFunction fn
        vc    <- (generateAssumeVC (fpre fn) <=< generateVC (fbody fn)) mempty
        vc'   <- getSideCond
        return $ vc <> vc'
@@ -109,7 +112,11 @@ generateStmtVC (BlockStmt _ ss) vc
 
 -- if b { s1 } else { s2 }
 generateStmtVC (IfStmt _ b s1 s2) vc
-  = errorstar "FILL THIS IN 2"
+  = do vc1 <- generateStmtVC s1 vc
+       vc2 <- generateStmtVC s2 vc
+       let pb = F.prop b
+       return $ (fmap (F.PImp pb)          vc1)
+             <> (fmap (F.PImp (F.PNot pb)) vc2)
 
 -- if b { s1 }
 generateStmtVC (IfSingleStmt l b s) vc
@@ -117,7 +124,18 @@ generateStmtVC (IfSingleStmt l b s) vc
 
 -- while (cond) { s }
 generateStmtVC (WhileStmt l cond s) vc
-  = errorstar "FILL THIS IN 3"
+  = do
+  let i = getInvariant s
+--  generateAssertVC l i
+--    <=< (generateAssumeVC (F.PAnd [i, F.prop cond]) <=< generateStmtVC s <=< generateAssertVC l i)
+--    <=< generateAssumeVC (F.PNot (F.prop cond))
+--    <=< generateAssertVC l i
+--    $ vc
+  let vci = newVCond l i
+  vci' <- generateVC s vci
+  addSideCond $ fmap (F.PImp (F.PAnd [i, F.prop cond])) vci'
+  addSideCond $ fmap (F.PImp (F.PAnd [i, F.PNot (F.prop cond)])) vc
+  return vci
 
 -- var x1 [ = e1 ]; ... ; var xn [= en];
 generateStmtVC (VarDeclStmt _ ds) vc
@@ -163,14 +181,16 @@ generateAsgnVC _ x e  vc
 --------------------------------------------------------------------------------
 
 generateAssumeVC :: F.Pred -> VCond -> VCM VCond
-generateAssumeVC = errorstar "FILL THIS IN 4"
+generateAssumeVC p vc = return $ fmap (F.PImp p) vc
 
 generateAssertVC :: SourcePos -> F.Pred -> VCond -> VCM VCond
-generateAssertVC = errorstar "FILL THIS IN 5"
+generateAssertVC l p vc = return $ vc <> newVCond l p
 
 -- x = e; // where e is not a function call
 generateExprAsgnVC :: (F.Symbolic x, F.Expression e) => x -> e -> VCond -> VCM VCond
-generateExprAsgnVC = errorstar "FILL THIS IN 6"
+generateExprAsgnVC x e vc =
+  --traceShow ("generateExprAsgnVC", vc) $
+  return $ fmap (F.subst (F.mkSubst [(F.symbol x, F.expr e)])) vc
 
 -- Do the next two last: You can knock off all the tests **WITHOUT**
 -- function calls (other than the spec calls -- invariant, assert, assume)
@@ -178,9 +198,23 @@ generateExprAsgnVC = errorstar "FILL THIS IN 6"
 
 -- x = f(e1,...,en)
 generateFunAsgnVC :: (F.Symbolic x, F.Expression e) => SourcePos -> x -> String -> [e] -> VCond -> VCM VCond
-generateFunAsgnVC = errorstar "FILL THIS IN 7"
+generateFunAsgnVC l x f le vc = do
+  fs <- getCalleeSpec f
+  let argsubst  = zip (map F.symbol (fargs fs)) (map F.expr le)
+  let pre       = F.subst (F.mkSubst argsubst) (fpre fs)
+  let post      = F.subst
+                    (F.mkSubst ((returnSymbol, F.expr (F.symbol x)):argsubst))
+                    (fpost fs)
+  --traceShow ("PRE", pre, "POST", post) $
+  (generateAssertVC l pre <=< generateAssumeVC post) vc
 
 -- return e
-generateReturnVC :: SourcePos-> Expression SourcePos -> VCond-> VCM VCond
-generateReturnVC = errorstar "FILL THIS IN 8"
+generateReturnVC :: SourcePos -> Expression SourcePos -> VCond -> VCM VCond
+generateReturnVC l e vc =
+  --traceShow ("generateReturnVC", vc) $
+  do
+    pc <- getFunctionPostcond
+    let pc' = F.subst (F.mkSubst [(returnSymbol, F.expr e)]) pc
+    --traceShow ("=>", vc <> newVCond l pc') $
+    return $ vc <> newVCond l pc'
 

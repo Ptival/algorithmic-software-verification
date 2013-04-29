@@ -11,6 +11,8 @@ function pos(){
 }
 
 function sumLoop(acc, i){
+  requires(0 <= i);
+  ensures($result == acc + i);
   var r = 0;
   if (0 < i){
     r = sumLoop(acc + 1, i - 1);

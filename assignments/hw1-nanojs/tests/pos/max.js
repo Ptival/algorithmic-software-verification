@@ -1,4 +1,4 @@
-function max(x, y){ 
+function max(x, y){
   var r = 0;
   if (x > y) {
     r = x;
