@@ -35,6 +35,7 @@ function main(){
   var l    = create();
 
   while (0 < n){
+    invariant(l == 0);
     if (0 < flag){
       l = acquire(l);
     }

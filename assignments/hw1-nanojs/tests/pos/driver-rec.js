@@ -31,10 +31,12 @@ function release(l){
 
 function driver() {
   var newCount = pos();
-  var oldCount = pos(); 
+  var oldCount = pos();
   var l        = create();
   if (newCount < oldCount){
     while (newCount != oldCount){
+      invariant(newCount == oldCount || l == 0);
+      invariant(newCount != oldCount || l == 1);
       l        = acquire(l);
       oldCount = newCount;
       if (0 < newCount){
