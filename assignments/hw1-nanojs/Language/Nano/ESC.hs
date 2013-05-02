@@ -83,14 +83,17 @@ instance IsVerifiable (VarDecl SourcePos) where
   generateVC (VarDecl l x (Just e)) vc = generateAsgnVC l x e vc
   generateVC (VarDecl _ _ Nothing)  vc = return vc
 
---------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
 generateFunVC    :: Fun SourcePos -> VCM VCond
---------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
 generateFunVC fn
-  = do setFunction fn
-       vc    <- generateAssumeVC (fpre fn) <=< generateVC (fbody fn) $ mempty
-       vc'   <- getSideCond
-       return $ vc <> vc'
+  = do _        <- setFunction fn
+       let sts   = fbody fn ++ [retStmt (floc fn)]
+       vc       <- generateAssumeVC (fpre fn) <=< generateVC sts $ mempty
+       vc'      <- getSideCond
+       return    $ vc <> vc'
+
+retStmt l = ReturnStmt l . Just $ IntLit l 0
 
 --------------------------------------------------------------------------------
 generateStmtVC :: Statement SourcePos -> VCond -> VCM VCond
