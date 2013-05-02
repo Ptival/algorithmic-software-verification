@@ -207,9 +207,9 @@ generateFunAsgnVC l x f le vc = do
 
 -- return e
 generateReturnVC :: SourcePos -> Expression SourcePos -> VCond -> VCM VCond
-generateReturnVC l e vc =
+generateReturnVC l e _ = -- the VCond is ignored since it is unreachable code
   do
     pc <- getFunctionPostcond
     let pc' = F.subst (F.mkSubst [(returnSymbol, F.expr e)]) pc
-    return $ newVCond l pc' <> vc -- vc is useless here :(
+    return $ newVCond l pc'
 
