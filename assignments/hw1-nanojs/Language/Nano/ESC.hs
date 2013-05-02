@@ -21,7 +21,6 @@ import           Language.Nano.Types
 import           Language.Nano.VCMonad
 import           Data.Monoid
 import           Data.Maybe                   (isJust, fromJust)
-import           Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | Top-level Verifier
@@ -33,7 +32,6 @@ verifyFile f
   = do nano   <- parseNanoFromFile f
        forM_ nano (putStrLn . render . pp)
        let vc  = genVC nano
-       --putStrLn $ "VC:\n" ++ show vc
        writeFile (f `addExtension` ".vc") (render $ pp vc)
        rs     <- mapM checkVC $ obligationsVCond vc
        forM_ rs $ putStrLn . render . pp
@@ -90,7 +88,7 @@ generateFunVC    :: Fun SourcePos -> VCM VCond
 --------------------------------------------------------------------------------
 generateFunVC fn
   = do setFunction fn
-       vc    <- (generateAssumeVC (fpre fn) <=< generateVC (fbody fn)) mempty
+       vc    <- generateAssumeVC (fpre fn) <=< generateVC (fbody fn) $ mempty
        vc'   <- getSideCond
        return $ vc <> vc'
 
@@ -112,11 +110,12 @@ generateStmtVC (BlockStmt _ ss) vc
 
 -- if b { s1 } else { s2 }
 generateStmtVC (IfStmt _ b s1 s2) vc
-  = do vc1 <- generateStmtVC s1 vc
-       vc2 <- generateStmtVC s2 vc
-       let pb = F.prop b
-       return $ (fmap (F.PImp pb)          vc1)
-             <> (fmap (F.PImp (F.PNot pb)) vc2)
+  = do
+  vc1 <- generateStmtVC s1 vc
+  vc2 <- generateStmtVC s2 vc
+  return $ (F.PImp pb <$> vc1) <> (F.PImp (F.PNot pb) <$> vc2)
+  where
+    pb = F.prop b
 
 -- if b { s1 }
 generateStmtVC (IfSingleStmt l b s) vc
@@ -125,17 +124,14 @@ generateStmtVC (IfSingleStmt l b s) vc
 -- while (cond) { s }
 generateStmtVC (WhileStmt l cond s) vc
   = do
-  let i = getInvariant s
---  generateAssertVC l i
---    <=< (generateAssumeVC (F.PAnd [i, F.prop cond]) <=< generateStmtVC s <=< generateAssertVC l i)
---    <=< generateAssumeVC (F.PNot (F.prop cond))
---    <=< generateAssertVC l i
---    $ vc
-  let vci = newVCond l i
   vci' <- generateVC s vci
-  addSideCond $ fmap (F.PImp (F.PAnd [i, F.prop cond])) vci'
-  addSideCond $ fmap (F.PImp (F.PAnd [i, F.PNot (F.prop cond)])) vc
+  addSideCond $ F.PImp (i `pAnd` pcond) <$> vci'
+  addSideCond $ F.PImp (i `pAnd` F.PNot pcond) <$> vc
   return vci
+  where
+    i     = getInvariant s
+    vci   = newVCond l i
+    pcond = F.prop cond
 
 -- var x1 [ = e1 ]; ... ; var xn [= en];
 generateStmtVC (VarDeclStmt _ ds) vc
@@ -181,16 +177,15 @@ generateAsgnVC _ x e  vc
 --------------------------------------------------------------------------------
 
 generateAssumeVC :: F.Pred -> VCond -> VCM VCond
-generateAssumeVC p vc = return $ fmap (F.PImp p) vc
+generateAssumeVC p vc = return $ F.PImp p <$> vc
 
 generateAssertVC :: SourcePos -> F.Pred -> VCond -> VCM VCond
-generateAssertVC l p vc = return $ vc <> newVCond l p
+generateAssertVC l p vc = return $ newVCond l p <> vc
 
 -- x = e; // where e is not a function call
 generateExprAsgnVC :: (F.Symbolic x, F.Expression e) => x -> e -> VCond -> VCM VCond
 generateExprAsgnVC x e vc =
-  --traceShow ("generateExprAsgnVC", vc) $
-  return $ fmap (F.subst (F.mkSubst [(F.symbol x, F.expr e)])) vc
+  return $ F.subst (F.mkSubst [(F.symbol x, F.expr e)]) <$> vc
 
 -- Do the next two last: You can knock off all the tests **WITHOUT**
 -- function calls (other than the spec calls -- invariant, assert, assume)
@@ -205,16 +200,13 @@ generateFunAsgnVC l x f le vc = do
   let post      = F.subst
                     (F.mkSubst ((returnSymbol, F.expr (F.symbol x)):argsubst))
                     (fpost fs)
-  --traceShow ("PRE", pre, "POST", post) $
-  (generateAssertVC l pre <=< generateAssumeVC post) vc
+  generateAssertVC l pre <=< generateAssumeVC post $ vc
 
 -- return e
 generateReturnVC :: SourcePos -> Expression SourcePos -> VCond -> VCM VCond
 generateReturnVC l e vc =
-  --traceShow ("generateReturnVC", vc) $
   do
     pc <- getFunctionPostcond
     let pc' = F.subst (F.mkSubst [(returnSymbol, F.expr e)]) pc
-    --traceShow ("=>", vc <> newVCond l pc') $
-    return $ vc <> newVCond l pc'
+    return $ newVCond l pc' <> vc -- vc is useless here :(
 
