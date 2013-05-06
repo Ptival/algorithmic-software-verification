@@ -13,7 +13,7 @@ function acquire(l){
 }
 
 function release(l){
-  assert(l==1);
+  assert(l == 1);
   return 0;
 }
 
