@@ -83,9 +83,9 @@ instance IsVerifiable (VarDecl SourcePos) where
   generateVC (VarDecl l x (Just e)) vc = generateAsgnVC l x e vc
   generateVC (VarDecl _ _ Nothing)  vc = return vc
 
------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 generateFunVC    :: Fun SourcePos -> VCM VCond
------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 generateFunVC fn
   = do _        <- setFunction fn
        let sts   = fbody fn ++ [retStmt (floc fn)]
@@ -188,7 +188,7 @@ generateAssertVC l p vc = return $ newVCond l p <> vc
 -- x = e; // where e is not a function call
 generateExprAsgnVC :: (F.Symbolic x, F.Expression e) => x -> e -> VCond -> VCM VCond
 generateExprAsgnVC x e vc =
-  return $ F.subst (F.mkSubst [(F.symbol x, F.expr e)]) <$> vc
+  return $ (flip F.subst1) (F.symbol x, F.expr e) <$> vc
 
 -- Do the next two last: You can knock off all the tests **WITHOUT**
 -- function calls (other than the spec calls -- invariant, assert, assume)
